@@ -1,15 +1,17 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const cors = require("cors");
 const { Server } = require("socket.io");
 
 const app = express();
+app.use(cors());
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" }
 });
 
-// Map username to socket.id
 const userSocketMap = {};
 
 io.on("connection", (socket) => {
@@ -17,17 +19,12 @@ io.on("connection", (socket) => {
 
   socket.on("register-user", (username) => {
     userSocketMap[username] = socket.id;
-    console.log(`Registered user ${username} → ${socket.id}`);
   });
 
   socket.on("call-user", ({ toUsername, signal, username }) => {
     const targetSocket = userSocketMap[toUsername];
     if (targetSocket) {
-      io.to(targetSocket).emit("receive-call", {
-        from: socket.id,
-        signal,
-        username
-      });
+      io.to(targetSocket).emit("receive-call", { from: socket.id, signal, username });
     }
   });
 
@@ -36,17 +33,23 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    // Remove user from map
     for (const [name, id] of Object.entries(userSocketMap)) {
       if (id === socket.id) {
         delete userSocketMap[name];
         break;
       }
     }
-    console.log("User disconnected:", socket.id);
   });
 });
 
-server.listen(5000, () => {
-  console.log("Server running on port 5000");
+// Serve static frontend
+app.use(express.static(path.join(__dirname, "../client/out")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../client/out/index.html"));
+});
+
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
